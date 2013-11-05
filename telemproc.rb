@@ -1,3 +1,5 @@
+require "time"
+
 # Always wait for input at exit so that window doesn't close
 at_exit do
   puts "Finished, press Enter to close."
@@ -114,8 +116,13 @@ ARGV.each do |file_name|
   # Write the headers to the new file.
   output_file.puts wanted_data.join(",")
   
-  # We'll keep track of old data. For now, initialize a hash of zeroes.
+  # Keep track of old data. For now, initialize a hash of zeroes.
   old_data = Hash[expected_headers.zip Array.new(headers.length, 0)]
+  
+  # Keep track of flight times and batteries used.
+  battery_lives = []
+  flight_start = ""
+  voltage_end = 0
     
   # Loop over the file
   input_file.each_line.with_index do |line, index|
@@ -133,34 +140,73 @@ ARGV.each do |file_name|
       wanted_data.each do |field|
 
         # Find the value of the current field in the current row.
-        value = current_data[field]
+        current_value = current_data[field]
+        old_value = old_data[field]
         
         # Do special processing here.
         # Convert the time into something Excel can understand.
         if field == "Time"
-          value = value[0..-5]
+          current_value = current_value[0..-5]
         end
-        
+
         # Strip out bad barometer data.
         if field == "Baro Alt"
-        
+
           # Get rid of negative values.
-          if value.to_f < 0
-            value = "0"
+          if current_value.to_f < 0
+            current_value = "0"
           end
-            
+
+          # TODO - Compare to the previous value and strip out anomalies.
+          
         end
-        
-        output_data << value
+   
+        # Add the current value to the array of data to be written to file.
+        output_data << current_value
       end
+
+      # Look at the current draw to work out whether the copter is in the air.
+      # Taking off
+      if current_data["Current"].to_f >= 2 && old_data["Current"].to_f < 2
+      
+        # The copter has just taken off. Log the flight start time.
+        flight_start = Time.parse(current_data["Date"] + " " +
+                                  current_data["Time"])
         
+        # See if this is a new battery
+        if current_data["Cell volts"].to_f - voltage_end > 0.5
+          # Create a new flight time log
+          battery_lives[battery_lives.length] = 0
+        end
+      end
+      
+      # Landing
+      if current_data["Current"].to_f <= 2 && old_data["Current"].to_f > 2
+      
+        # The copter has just landed. Log the length of the flight.
+        flight_end = Time.parse(current_data["Date"] + " " +
+                                current_data["Time"])       
+        battery_lives[-1] = battery_lives[-1].to_f + 
+                                 (flight_end - flight_start).to_f
+        
+        # Log the voltage.
+        voltage_end = current_data["Cell volts"].to_f  
+      end
+      
       output_file.puts output_data.join(",")
       
       # Finally, we replace the old data with the new data.
       old_data = current_data
       
-    end
-    
+    end  
+  end
+  
+  #Report the flight time details:
+  puts file_name + " contains data for " + battery_lives.length.to_s + 
+       " LiPos worth of flights:" 
+  
+  battery_lives.each.with_index do |life, lipo|
+    puts "LiPo " + lipo.to_s + ": "+ Time.at(life).strftime('%M:%S')
   end
   
   # Close the files
