@@ -1,6 +1,6 @@
 require "time"
 
-# Always wait for input at exit so that command window doesn't close.
+# Always wait for input at exit so that the command window doesn't close.
 at_exit do
   puts "Finished, press Enter to close."
   $stdin.gets
@@ -155,34 +155,31 @@ ARGV.each do |file_name|
     if index > 0
 
       # Put the current line into a hash.
-      current_data = Hash[expected_headers.zip line.split(",")]
+      cur_data = Hash[expected_headers.zip line.split(",")]
 
       # We'll write out the data we want to a new file.
       output_data = Array[]
 
       # Do special processing here.
       # Convert the time into something Excel can understand.
-      current_data["Time"] = current_data["Time"][0..-5]
+      cur_data["Time"] = cur_data["Time"][0..-5]
+      
+      # Get the altitudes
+      cur_alt = cur_data["Baro Alt"].to_f
+      old_alt = old_data["Baro Alt"].to_f
 
       # Basic barometer calibration
       if index == 1
-        altitude_offset = current_data["Baro Alt"].to_f
-      end
-
+        altitude_offset = cur_alt
+        old_alt = 0 - altitude_offset
+      end    
+      
       # Remove anomalies in the barometer data.
-      if (current_data["Baro Alt"].to_f - old_data["Baro Alt"].to_f).abs >
-          max_altitude_diff
+      cur_alt = (cur_alt - altitude_offset).round(2)
+      
+      if (cur_alt - old_alt).abs > max_altitude_diff
         # Altitude data is rubbish. Use the old data.
-        current_data["Baro Alt"] = old_data["Baro Alt"]
-      else
-        # Altitude data is OK. Apply the offset.
-        # @@@ TODO
-      end
-
-      if altitudes.length > 0
-        if current_data["Baro Alt"].to_f > altitudes[-1]
-          altitudes[-1] = current_data["Baro Alt"].to_f
-        end
+        cur_alt = old_alt
       end
 
       # Check for takeoff/landing/batteries less frequently.
@@ -190,15 +187,15 @@ ARGV.each do |file_name|
 
         # Look at the current draw to work out whether the copter is in the air.
         # Taking off
-        if current_data["Current"].to_f >= min_current && 
+        if cur_data["Current"].to_f >= min_current && 
            ref_data["Current"].to_f < min_current
         
           # The copter has just taken off. Log the flight start time.
-          flight_start = Time.parse(current_data["Date"] + " " +
-                                    current_data["Time"])
+          flight_start = Time.parse(cur_data["Date"] + " " +
+                                    cur_data["Time"])
           
           # See if this is a new battery
-          if current_data["Cell volts"].to_f - voltage_end > max_voltage_diff
+          if cur_data["Cell volts"].to_f - voltage_end > max_voltage_diff
             # Create a new flight time log
             battery_lives[battery_lives.length] = 0
           end
@@ -207,45 +204,50 @@ ARGV.each do |file_name|
           altitudes[altitudes.length] = 0
           
           # Reset the altitude offset
-          altitude_offset = current_data["Baro Alt"].to_f
+          altitude_offset = cur_alt
           
         end
         
         # Landing
-        if current_data["Current"].to_f <= min_current && 
+        if cur_data["Current"].to_f <= min_current && 
            ref_data["Current"].to_f > min_current
         
           # The copter has just landed. Log the length of the flight.
-          flight_end = Time.parse(current_data["Date"] + " " +
-                                  current_data["Time"])       
+          flight_end = Time.parse(cur_data["Date"] + " " +
+                                  cur_data["Time"])       
           battery_lives[-1] = battery_lives[-1].to_f + 
                                    (flight_end - flight_start).to_f
           
           # Log the voltage.
-          voltage_end = current_data["Cell volts"].to_f  
-          
-          # Reset the altitude offset
-          altitude_offset = current_data["Baro Alt"].to_f
-          
+          voltage_end = cur_data["Cell volts"].to_f  
+                    
         end  
       
-        ref_data = current_data
+        ref_data = cur_data
       end
+            
+      if altitudes.length > 0
+        if cur_alt > altitudes[-1]
+          altitudes[-1] = cur_alt
+        end
+      end
+      
+      cur_data["Baro Alt"] = cur_alt.to_s
       
       # Loop over the data we want, extracting it from the current row.
       wanted_data.each do |field|
 
         # Find the value of the current field in the current row.
-        current_value = current_data[field]
+        cur_value = cur_data[field]
    
         # Add the current value to the array of data to be written to file.
-        output_data << current_value
+        output_data << cur_value
       end
       
       output_file.puts output_data.join(",")
       
       # Finally, we replace the old data with the new data.
-      old_data = current_data
+      old_data = cur_data
       
     end
   end
