@@ -1,6 +1,6 @@
 require "time"
 
-# Always wait for input at exit so that command  window doesn't close.
+# Always wait for input at exit so that command window doesn't close.
 at_exit do
   puts "Finished, press Enter to close."
   $stdin.gets
@@ -92,7 +92,9 @@ wanted_data = ["Date",
               "Thr",
               "Ail"]
 
-usage = "Usage message goes here"
+# Usage text
+# @@@ TODO
+usage = ""
 
 # Check that we have been given some arguments
 if (ARGV.length <1)
@@ -151,10 +153,10 @@ ARGV.each do |file_name|
     
     # We don't want the header row, so only parse data after that.
     if index > 0
-    
+
       # Put the current line into a hash.
       current_data = Hash[expected_headers.zip line.split(",")]
-      
+
       # We'll write out the data we want to a new file.
       output_data = Array[]
 
@@ -166,7 +168,7 @@ ARGV.each do |file_name|
       if index == 1
         altitude_offset = current_data["Baro Alt"].to_f
       end
-      
+
       # Remove anomalies in the barometer data.
       if (current_data["Baro Alt"].to_f - old_data["Baro Alt"].to_f).abs >
           max_altitude_diff
@@ -174,8 +176,9 @@ ARGV.each do |file_name|
         current_data["Baro Alt"] = old_data["Baro Alt"]
       else
         # Altitude data is OK. Apply the offset.
+        # @@@ TODO
       end
-      
+
       if altitudes.length > 0
         if current_data["Baro Alt"].to_f > altitudes[-1]
           altitudes[-1] = current_data["Baro Alt"].to_f
