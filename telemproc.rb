@@ -2,6 +2,7 @@ require "time"
 
 # Always wait for input at exit so that the command window doesn't close.
 at_exit do
+  puts ""
   puts "Finished, press Enter to close."
   $stdin.gets
 end
@@ -16,9 +17,9 @@ max_voltage_diff = 1
 # altitude greater than this value will be ignored.
 max_altitude_diff = 2
 
-# Minimum current (in amps). The copter will be considered grounded if the
+# Minimum current (in amps). The 'copter will be considered grounded if the
 # current is below this value.
-min_current = 2
+min_current = 3
 
 # Some data needs to be checked less frequently so that we can spot genuine 
 # changes rather than fluctuations. This is how frequently (in data points) we 
@@ -173,10 +174,10 @@ ARGV.each do |file_name|
         altitude_offset = cur_alt
         old_alt = 0 - altitude_offset
       end    
-      
+
       # Remove anomalies in the barometer data.
       cur_alt = (cur_alt - altitude_offset).round(2)
-      
+
       if (cur_alt - old_alt).abs > max_altitude_diff
         # Altitude data is rubbish. Use the old data.
         cur_alt = old_alt
@@ -189,23 +190,19 @@ ARGV.each do |file_name|
         # Taking off
         if cur_data["Current"].to_f >= min_current && 
            ref_data["Current"].to_f < min_current
-        
+
           # The copter has just taken off. Log the flight start time.
           flight_start = Time.parse(cur_data["Date"] + " " +
                                     cur_data["Time"])
-          
+
           # See if this is a new battery
           if cur_data["Cell volts"].to_f - voltage_end > max_voltage_diff
             # Create a new flight time log
             battery_lives[battery_lives.length] = 0
           end
-          
+
           # Start a new log for the altitude.
-          altitudes[altitudes.length] = 0
-          
-          # Reset the altitude offset
-          altitude_offset = cur_alt
-          
+          altitudes[altitudes.length] = 0        
         end
         
         # Landing
@@ -220,7 +217,9 @@ ARGV.each do |file_name|
           
           # Log the voltage.
           voltage_end = cur_data["Cell volts"].to_f  
-                    
+          
+          # Reset the altitude offset
+          altitude_offset = cur_alt                    
         end  
       
         ref_data = cur_data
@@ -244,24 +243,28 @@ ARGV.each do |file_name|
         output_data << cur_value
       end
       
+      # Write the data to the output file.
       output_file.puts output_data.join(",")
       
       # Finally, we replace the old data with the new data.
       old_data = cur_data
-      
     end
   end
   
   # Report the altitude details:
-  puts file_name + " contains data for " + altitudes.length.to_s + " flights:" 
+  puts ""
+  puts "Data from " + file_name
+  
+  puts ""
+  puts "Detected " + altitudes.length.to_s + " flights:" 
   
   altitudes.each.with_index do |alt, flight|
     puts "Flight " + (flight + 1).to_s + ": " + alt.to_s + "m"
   end
   
   # Report the battery lives:
-  puts file_name + " contains data for " + battery_lives.length.to_s + 
-       " LiPos worth of flights:" 
+  puts ""
+  puts "Used " + battery_lives.length.to_s + " LiPos:" 
 
   battery_lives.each.with_index do |life, lipo|
     puts "LiPo " + (lipo + 1).to_s + ": " + Time.at(life).strftime('%M:%S')
